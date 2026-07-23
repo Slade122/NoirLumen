@@ -6,9 +6,10 @@ NoirLumen is a fast, lightweight, per-monitor screen dimmer for Windows built wi
 
 - Per-monitor dimming and tint controls
 - Click-through native overlays that work on any monitor (including displays without hardware brightness control)
-- Per-monitor blue-light modes (`Off`, `Gentle`, `Warm`, `Amber`, `Red`)
+- Per-monitor blue-light modes (`Off`, `Gentle`, `Warm`, `Amber`, `Red`) tuned as natural temperature shifts
 - Sun-mimic mode with per-monitor include/exclude
 - Time-based and process-based automation rules
+- Tray controls for show/hide, presets, and automation toggle
 - Auto location detection with provider fallback
 - Light/Dark theme support
 - Buffered file logging for diagnostics with low runtime overhead
@@ -72,7 +73,10 @@ See:
 
 ## Performance notes
 
-- 1-second automation tick
+- Event-driven automation invalidation
+- One-shot refresh scheduling for the next sun/time boundary
+- Process start/stop watcher for process-based rules
+- Cached monitor topology with display-change invalidation
 - State-hash short-circuit to avoid redundant overlay applies
 - Buffered async logging with batched writes
 - Single-pass process sampling for process-rule evaluation

@@ -2,7 +2,7 @@ using NativeScreenDimmer_WinUI3.Models;
 
 namespace NativeScreenDimmer_WinUI3.Services;
 
-internal sealed class RuleEngine
+public sealed class RuleEngine
 {
     public bool IsRuleConditionActive(AutoRule rule, DateTime now, IReadOnlySet<string> runningProcessNames)
     {
@@ -127,7 +127,7 @@ internal sealed class RuleEngine
             return false;
         }
 
-        string normalized = System.IO.Path.GetFileNameWithoutExtension(rule.ProcessName.Trim());
+        string normalized = Path.GetFileNameWithoutExtension(rule.ProcessName.Trim());
         if (string.IsNullOrWhiteSpace(normalized))
         {
             return false;
@@ -135,5 +135,4 @@ internal sealed class RuleEngine
 
         return runningProcessNames.Contains(normalized);
     }
-
 }

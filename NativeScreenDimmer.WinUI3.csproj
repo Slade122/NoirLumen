@@ -28,6 +28,24 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="Core\NativeScreenDimmer.WinUI3.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Core\**\*.cs" />
+    <Compile Remove="Models\AppModes.cs" />
+    <Compile Remove="Models\AutoRule.cs" />
+    <Compile Remove="Models\MonitorDimSetting.cs" />
+    <Compile Remove="Services\AppLogger.cs" />
+    <Compile Remove="Services\RuleEngine.cs" />
+    <Compile Remove="Services\RuleTargetParser.cs" />
+    <Compile Remove="Services\RuleValidationService.cs" />
+    <Compile Remove="Services\SettingsStore.cs" />
+    <Compile Remove="tests\**\*.cs" />
+    <None Remove="tests\**\*.*" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Manifest Include="$(ApplicationManifest)" />
   </ItemGroup>
 
@@ -52,6 +70,7 @@
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2270" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.3.1" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" Version="0.5.0" />
+    <PackageReference Include="System.Management" Version="10.0.10" />
   </ItemGroup>
 
   <!--

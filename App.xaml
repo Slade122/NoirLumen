@@ -6,11 +6,50 @@
     xmlns:local="using:NativeScreenDimmer_WinUI3">
     <Application.Resources>
         <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Dark">
+                    <LinearGradientBrush x:Key="NoirLumenPageBackgroundBrush" StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="#FF090A0F" Offset="0" />
+                        <GradientStop Color="#FF141724" Offset="1" />
+                    </LinearGradientBrush>
+                    <SolidColorBrush x:Key="NoirLumenSurfaceBrush" Color="#FF151826" />
+                    <SolidColorBrush x:Key="NoirLumenSurfaceAltBrush" Color="#FF1B2031" />
+                    <SolidColorBrush x:Key="NoirLumenStrokeBrush" Color="#332D3250" />
+                    <SolidColorBrush x:Key="NoirLumenAccentBrush" Color="#FF8A5CFF" />
+                    <SolidColorBrush x:Key="NoirLumenAccentSoftBrush" Color="#338A5CFF" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <LinearGradientBrush x:Key="NoirLumenPageBackgroundBrush" StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="#FFF7F7FC" Offset="0" />
+                        <GradientStop Color="#FFEAEAF4" Offset="1" />
+                    </LinearGradientBrush>
+                    <SolidColorBrush x:Key="NoirLumenSurfaceBrush" Color="#FFFFFFFF" />
+                    <SolidColorBrush x:Key="NoirLumenSurfaceAltBrush" Color="#FFF5F5FB" />
+                    <SolidColorBrush x:Key="NoirLumenStrokeBrush" Color="#FFD9D9E7" />
+                    <SolidColorBrush x:Key="NoirLumenAccentBrush" Color="#FF6E42E5" />
+                    <SolidColorBrush x:Key="NoirLumenAccentSoftBrush" Color="#336E42E5" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+
+            <Style x:Key="NoirLumenPrimaryButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="{ThemeResource NoirLumenAccentBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource NoirLumenAccentBrush}" />
+                <Setter Property="Foreground" Value="White" />
+                <Setter Property="Padding" Value="16,10" />
+                <Setter Property="MinWidth" Value="112" />
+            </Style>
+
+            <Style x:Key="NoirLumenSecondaryButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="{ThemeResource NoirLumenSurfaceAltBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource NoirLumenStrokeBrush}" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                <Setter Property="Padding" Value="16,10" />
+                <Setter Property="MinWidth" Value="112" />
+            </Style>
+
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
-                <!-- Other merged dictionaries here -->
             </ResourceDictionary.MergedDictionaries>
-            <!-- Other app resources here -->
         </ResourceDictionary>
     </Application.Resources>
 </Application>

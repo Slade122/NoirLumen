@@ -3,7 +3,7 @@ using NativeScreenDimmer_WinUI3.Models;
 
 namespace NativeScreenDimmer_WinUI3.Services;
 
-internal sealed class SettingsStore
+public sealed class SettingsStore
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -15,20 +15,20 @@ internal sealed class SettingsStore
     public SettingsStore()
     {
         string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        string settingsDirectoryPath = System.IO.Path.Combine(appDataPath, "NativeScreenDimmer");
-        _settingsPath = System.IO.Path.Combine(settingsDirectoryPath, "settings.json");
+        string settingsDirectoryPath = Path.Combine(appDataPath, "NativeScreenDimmer");
+        _settingsPath = Path.Combine(settingsDirectoryPath, "settings.json");
     }
 
     public AppSettings Load()
     {
         using IDisposable operation = AppLogger.BeginOperation(nameof(Load));
-        if (!System.IO.File.Exists(_settingsPath))
+        if (!File.Exists(_settingsPath))
         {
             AppLogger.LogInfo($"Settings file not found at '{_settingsPath}'. Using defaults.");
             return new AppSettings();
         }
 
-        string json = System.IO.File.ReadAllText(_settingsPath);
+        string json = File.ReadAllText(_settingsPath);
         AppSettings? settings = JsonSerializer.Deserialize<AppSettings>(json, SerializerOptions);
         AppLogger.LogInfo($"Loaded settings from '{_settingsPath}'.");
         return settings ?? new AppSettings();
@@ -43,12 +43,12 @@ internal sealed class SettingsStore
     public AppSettings LoadFromPath(string settingsPath)
     {
         using IDisposable operation = AppLogger.BeginOperation(nameof(LoadFromPath));
-        if (!System.IO.File.Exists(settingsPath))
+        if (!File.Exists(settingsPath))
         {
             throw new FileNotFoundException($"Settings file not found at '{settingsPath}'.", settingsPath);
         }
 
-        string json = System.IO.File.ReadAllText(settingsPath);
+        string json = File.ReadAllText(settingsPath);
         AppSettings? settings = JsonSerializer.Deserialize<AppSettings>(json, SerializerOptions);
         AppLogger.LogInfo($"Loaded settings from '{settingsPath}'.");
         return settings ?? new AppSettings();
@@ -57,22 +57,22 @@ internal sealed class SettingsStore
     public void SaveToPath(AppSettings settings, string settingsPath)
     {
         using IDisposable operation = AppLogger.BeginOperation(nameof(SaveToPath));
-        string? directoryPath = System.IO.Path.GetDirectoryName(settingsPath);
+        string? directoryPath = Path.GetDirectoryName(settingsPath);
         if (string.IsNullOrWhiteSpace(directoryPath))
         {
             throw new InvalidOperationException($"Cannot resolve directory for settings file '{settingsPath}'.");
         }
 
-        System.IO.Directory.CreateDirectory(directoryPath);
+        Directory.CreateDirectory(directoryPath);
         string json = JsonSerializer.Serialize(settings, SerializerOptions);
-        System.IO.File.WriteAllText(settingsPath, json);
+        File.WriteAllText(settingsPath, json);
         AppLogger.LogInfo($"Saved settings to '{settingsPath}'.");
     }
 
     public string GetDefaultSettingsPath() => _settingsPath;
 }
 
-internal sealed class AppSettings
+public sealed class AppSettings
 {
     public List<MonitorDimSetting> Monitors { get; set; } = [];
 

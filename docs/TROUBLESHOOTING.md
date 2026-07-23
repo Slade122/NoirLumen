@@ -32,3 +32,9 @@
 1. Click `Save`
 2. Verify `%AppData%\NativeScreenDimmer\settings.json` exists
 3. Confirm no filesystem permission restrictions on `%AppData%`
+
+## Tray icon not visible
+
+1. Check the hidden icons area in the Windows taskbar
+2. Re-launch the app once to re-register the tray icon
+3. Check `%AppData%\NativeScreenDimmer\logs\app.log` for tray startup messages

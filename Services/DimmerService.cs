@@ -11,9 +11,10 @@ internal sealed class DimmerService : IDisposable
     public void Apply(IReadOnlyList<MonitorDimSetting> settings)
     {
         using IDisposable operation = AppLogger.BeginOperation(nameof(Apply));
-        Dictionary<string, MonitorDescriptor> monitorsByDevice = _monitorTopologyService
-            .GetMonitors()
-            .ToDictionary(monitor => monitor.DeviceName, StringComparer.OrdinalIgnoreCase);
+        IReadOnlyDictionary<string, MonitorDescriptor> monitorsByDevice = _monitorTopologyService.GetMonitorMap();
+        Dictionary<string, MonitorDimSetting> settingsByDevice = settings.ToDictionary(
+            setting => setting.DeviceName,
+            StringComparer.OrdinalIgnoreCase);
 
         foreach (MonitorDimSetting setting in settings)
         {
@@ -26,7 +27,7 @@ internal sealed class DimmerService : IDisposable
             overlayWindow.Apply(monitor, setting);
         }
 
-        HideMissingOrDisabledOverlays(settings, monitorsByDevice);
+        HideMissingOrDisabledOverlays(settingsByDevice, monitorsByDevice);
     }
 
     public void Dispose()
@@ -53,17 +54,15 @@ internal sealed class DimmerService : IDisposable
     }
 
     private void HideMissingOrDisabledOverlays(
-        IReadOnlyList<MonitorDimSetting> settings,
+        IReadOnlyDictionary<string, MonitorDimSetting> settingsByDevice,
         IReadOnlyDictionary<string, MonitorDescriptor> monitorsByDevice)
     {
-        HashSet<string> disabledDevices = settings
-            .Where(setting => !setting.IsEnabled || setting.DimPercent <= 0)
-            .Select(setting => setting.DeviceName)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
         foreach ((string deviceName, NativeOverlayWindow overlayWindow) in _overlaysByDeviceName)
         {
-            if (!monitorsByDevice.ContainsKey(deviceName) || disabledDevices.Contains(deviceName))
+            if (!monitorsByDevice.ContainsKey(deviceName)
+                || !settingsByDevice.TryGetValue(deviceName, out MonitorDimSetting? setting)
+                || !setting.IsEnabled
+                || setting.DimPercent <= 0)
             {
                 overlayWindow.Hide();
             }
@@ -74,14 +73,20 @@ internal sealed class DimmerService : IDisposable
 internal sealed class NativeOverlayWindow : IDisposable
 {
     private static readonly IntPtr TopmostWindowHandle = new(-1);
+    private static readonly Lock OverlayGate = new();
     private static readonly Dictionary<IntPtr, NativeOverlayWindow> OverlayByHandle = [];
     private static readonly WindowProcedureDelegate WindowProcedure = HandleWindowMessage;
+    private static readonly WinEventDelegate ShellEventCallback = HandleShellEvent;
     private static bool _windowClassRegistered;
     private static ushort _windowClassAtom;
+    private static IntPtr _foregroundEventHook;
+    private static IntPtr _objectShowEventHook;
+    private static IntPtr _objectReorderEventHook;
 
     private IntPtr _windowHandle;
     private uint _backgroundColorRef = 0x000000;
     private byte _alphaByte;
+    private bool _isVisible;
     private bool _disposed;
 
     public void Apply(MonitorDescriptor monitor, MonitorDimSetting setting)
@@ -97,6 +102,7 @@ internal sealed class NativeOverlayWindow : IDisposable
             return;
         }
 
+        _isVisible = true;
         SetWindowPos(
             _windowHandle,
             TopmostWindowHandle,
@@ -118,6 +124,7 @@ internal sealed class NativeOverlayWindow : IDisposable
             return;
         }
 
+        _isVisible = false;
         ShowWindow(_windowHandle, SwHide);
     }
 
@@ -131,7 +138,12 @@ internal sealed class NativeOverlayWindow : IDisposable
         _disposed = true;
         if (_windowHandle != IntPtr.Zero)
         {
-            OverlayByHandle.Remove(_windowHandle);
+            lock (OverlayGate)
+            {
+                OverlayByHandle.Remove(_windowHandle);
+                StopForegroundWatcherIfUnused();
+            }
+
             DestroyWindow(_windowHandle);
             _windowHandle = IntPtr.Zero;
         }
@@ -145,8 +157,9 @@ internal sealed class NativeOverlayWindow : IDisposable
         }
 
         RegisterWindowClass();
+        EnsureForegroundWatcher();
         _windowHandle = CreateWindowEx(
-            WsExLayered | WsExTransparent | WsExToolWindow | WsExNoActivate,
+            WsExTopmost | WsExLayered | WsExTransparent | WsExToolWindow | WsExNoActivate,
             WindowClassName,
             string.Empty,
             WsPopup,
@@ -164,7 +177,10 @@ internal sealed class NativeOverlayWindow : IDisposable
             throw new InvalidOperationException($"CreateWindowEx failed with Win32 error {Marshal.GetLastWin32Error()}.");
         }
 
-        OverlayByHandle[_windowHandle] = this;
+        lock (OverlayGate)
+        {
+            OverlayByHandle[_windowHandle] = this;
+        }
     }
 
     private static void RegisterWindowClass()
@@ -199,13 +215,22 @@ internal sealed class NativeOverlayWindow : IDisposable
 
     private static IntPtr HandleWindowMessage(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam)
     {
-        if (!OverlayByHandle.TryGetValue(hwnd, out NativeOverlayWindow? overlay))
+        NativeOverlayWindow? overlay;
+        lock (OverlayGate)
         {
-            return DefWindowProc(hwnd, message, wParam, lParam);
+            if (!OverlayByHandle.TryGetValue(hwnd, out overlay))
+            {
+                return DefWindowProc(hwnd, message, wParam, lParam);
+            }
         }
 
         if (message == WmPaint)
         {
+            if (overlay is null)
+            {
+                return DefWindowProc(hwnd, message, wParam, lParam);
+            }
+
             PaintStruct paintStruct = new();
             IntPtr hdc = BeginPaint(hwnd, ref paintStruct);
             IntPtr brush = CreateSolidBrush(overlay._backgroundColorRef);
@@ -221,6 +246,129 @@ internal sealed class NativeOverlayWindow : IDisposable
         }
 
         return DefWindowProc(hwnd, message, wParam, lParam);
+    }
+
+    private static void EnsureForegroundWatcher()
+    {
+        if (_foregroundEventHook != IntPtr.Zero
+            && _objectShowEventHook != IntPtr.Zero
+            && _objectReorderEventHook != IntPtr.Zero)
+        {
+            return;
+        }
+
+        _foregroundEventHook = SetWinEventHook(
+            EventSystemForeground,
+            EventSystemForeground,
+            IntPtr.Zero,
+            ShellEventCallback,
+            0,
+            0,
+            WineventOutofcontext | WineventSkipownprocess);
+
+        _objectShowEventHook = SetWinEventHook(
+            EventObjectShow,
+            EventObjectShow,
+            IntPtr.Zero,
+            ShellEventCallback,
+            0,
+            0,
+            WineventOutofcontext | WineventSkipownprocess);
+
+        _objectReorderEventHook = SetWinEventHook(
+            EventObjectReorder,
+            EventObjectReorder,
+            IntPtr.Zero,
+            ShellEventCallback,
+            0,
+            0,
+            WineventOutofcontext | WineventSkipownprocess);
+    }
+
+    private static void StopForegroundWatcherIfUnused()
+    {
+        if (OverlayByHandle.Count != 0)
+        {
+            return;
+        }
+
+        if (_foregroundEventHook != IntPtr.Zero)
+        {
+            UnhookWinEvent(_foregroundEventHook);
+            _foregroundEventHook = IntPtr.Zero;
+        }
+
+        if (_objectShowEventHook != IntPtr.Zero)
+        {
+            UnhookWinEvent(_objectShowEventHook);
+            _objectShowEventHook = IntPtr.Zero;
+        }
+
+        if (_objectReorderEventHook != IntPtr.Zero)
+        {
+            UnhookWinEvent(_objectReorderEventHook);
+            _objectReorderEventHook = IntPtr.Zero;
+        }
+    }
+
+    private static void HandleShellEvent(
+        IntPtr hookHandle,
+        uint eventType,
+        IntPtr windowHandle,
+        int objectId,
+        int childId,
+        uint eventThreadId,
+        uint eventTime)
+    {
+        if (objectId != ObjidWindow || childId != 0)
+        {
+            return;
+        }
+
+        List<NativeOverlayWindow> overlays;
+        lock (OverlayGate)
+        {
+            overlays = OverlayByHandle.Values.ToList();
+        }
+
+        foreach (NativeOverlayWindow overlay in overlays)
+        {
+            overlay.ReassertTopmostBurstIfVisible();
+        }
+    }
+
+    private void ReassertTopmostBurstIfVisible()
+    {
+        if (_windowHandle == IntPtr.Zero || !_isVisible || _disposed)
+        {
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            ReassertTopmostCore();
+            await Task.Delay(24).ConfigureAwait(false);
+            ReassertTopmostCore();
+            await Task.Delay(96).ConfigureAwait(false);
+            ReassertTopmostCore();
+        });
+    }
+
+    private void ReassertTopmostCore()
+    {
+        if (_windowHandle == IntPtr.Zero || !_isVisible || _disposed)
+        {
+            return;
+        }
+
+        _ = SetWindowPos(
+            _windowHandle,
+            TopmostWindowHandle,
+            0,
+            0,
+            0,
+            0,
+            SwpNoMove | SwpNoSize | SwpNoActivate | SwpNoOwnerZOrder);
     }
 
     private static uint ToColorRef(string colorHex)
@@ -257,17 +405,27 @@ internal sealed class NativeOverlayWindow : IDisposable
 
     private const string WindowClassName = "NativeScreenDimmerOverlayWindowClass";
     private const int WsPopup = unchecked((int)0x80000000);
+    private const int WsExTopmost = 0x00000008;
     private const int WsExLayered = 0x00080000;
     private const int WsExTransparent = 0x00000020;
     private const int WsExToolWindow = 0x00000080;
     private const int WsExNoActivate = 0x08000000;
     private const uint LwaAlpha = 0x00000002;
+    private const uint SwpNoSize = 0x0001;
+    private const uint SwpNoMove = 0x0002;
     private const uint SwpNoActivate = 0x0010;
+    private const uint SwpNoOwnerZOrder = 0x0200;
     private const uint SwpShowWindow = 0x0040;
     private const int SwHide = 0;
     private const int SwShownoactivate = 4;
     private const uint WmPaint = 0x000F;
     private const uint WmErasebkgnd = 0x0014;
+    private const uint EventSystemForeground = 0x0003;
+    private const uint EventObjectShow = 0x8002;
+    private const uint EventObjectReorder = 0x8004;
+    private const uint WineventOutofcontext = 0x0000;
+    private const uint WineventSkipownprocess = 0x0002;
+    private const int ObjidWindow = 0;
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct WindowClass
@@ -305,6 +463,14 @@ internal sealed class NativeOverlayWindow : IDisposable
     }
 
     private delegate IntPtr WindowProcedureDelegate(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam);
+    private delegate void WinEventDelegate(
+        IntPtr hookHandle,
+        uint eventType,
+        IntPtr windowHandle,
+        int objectId,
+        int childId,
+        uint eventThreadId,
+        uint eventTime);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern ushort RegisterClass(ref WindowClass windowClass);
@@ -367,4 +533,17 @@ internal sealed class NativeOverlayWindow : IDisposable
 
     [DllImport("user32.dll")]
     private static extern bool DestroyWindow(IntPtr windowHandle);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SetWinEventHook(
+        uint eventMin,
+        uint eventMax,
+        IntPtr moduleHandle,
+        WinEventDelegate callback,
+        uint processId,
+        uint threadId,
+        uint flags);
+
+    [DllImport("user32.dll")]
+    private static extern bool UnhookWinEvent(IntPtr hookHandle);
 }

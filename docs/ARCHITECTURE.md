@@ -7,9 +7,11 @@ NoirLumen has two layers:
 1. **WinUI 3 shell** (`MainWindow`, `MainPage`)
 2. **Native dimming/runtime services** (`Services/*`)
 
+The shell also wires a native tray host (`TrayService`) that runs on a dedicated STA thread and dispatches control actions back onto the WinUI thread.
+
 ## Core flow
 
-1. UI state is updated from user input, settings load, or timers.
+1. UI state is updated from user input, settings load, process events, or scheduled boundary refreshes.
 2. `RuleEngine` computes effective monitor settings.
 3. `BlueLightService` and sun-mimic processing transform color/dim values.
 4. `DimmerService` maps monitor settings to native overlays.
@@ -23,7 +25,7 @@ NoirLumen has two layers:
 
 ## Monitor discovery
 
-`MonitorTopologyService` uses `EnumDisplayMonitors` + `GetMonitorInfo` and emits:
+`MonitorTopologyService` caches `EnumDisplayMonitors` + `GetMonitorInfo` output and invalidates on display/device change events. It emits:
 
 - Device name
 - Primary flag

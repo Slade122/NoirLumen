@@ -1,44 +1,72 @@
-﻿using Windows.ApplicationModel;
-using Windows.ApplicationModel.Activation;
-using Windows.Foundation;
-using Windows.Foundation.Collections;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Data;
-using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Navigation;
-using Microsoft.UI.Xaml.Shapes;
-
-// To learn more about WinUI, the WinUI project structure,
-// and more about our project templates, see: http://aka.ms/winui-project-info.
+using NativeScreenDimmer_WinUI3.Services;
 
 namespace NativeScreenDimmer_WinUI3;
 
-/// <summary>
-/// Provides application-specific behavior to supplement the default Application class.
-/// </summary>
 public partial class App : Application
 {
-    private Window? _window;
-    
-    /// <summary>
-    /// Initializes the singleton application object.  This is the first line of authored code
-    /// executed, and as such is the logical equivalent of main() or WinMain().
-    /// </summary>
+    private MainWindow? _window;
+    private TrayService? _trayService;
+    private bool _allowMainWindowClose;
+
     public App()
     {
         InitializeComponent();
     }
 
-    /// <summary>
-    /// Invoked when the application is launched.
-    /// </summary>
-    /// <param name="args">Details about the launch request and process.</param>
     protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
     {
         _window = new MainWindow();
+        AppLogger.LogInfo("Main window created.");
+        _window.AppWindow.Closing += MainWindow_Closing;
+        _trayService = new TrayService(
+            _window.IsVisibleOnScreen,
+            () => { _window.DispatcherQueue.TryEnqueue(() => _window.ShowFromTray()); },
+            () => { _window.DispatcherQueue.TryEnqueue(() => _window.HideToTray()); },
+            () => { _window.DispatcherQueue.TryEnqueue(() => ExecuteOnMainPage(mainPage => mainPage.ApplyBalancedPreset())); },
+            () => { _window.DispatcherQueue.TryEnqueue(() => ExecuteOnMainPage(mainPage => mainPage.ApplyEveningPreset())); },
+            () => { _window.DispatcherQueue.TryEnqueue(() => ExecuteOnMainPage(mainPage => mainPage.ApplyPerformancePreset())); },
+            () => { _window.DispatcherQueue.TryEnqueue(() => ExecuteOnMainPage(mainPage => mainPage.SetAutomationEnabledFromTray(true))); },
+            () => { _window.DispatcherQueue.TryEnqueue(() => ExecuteOnMainPage(mainPage => mainPage.SetAutomationEnabledFromTray(false))); },
+            () => { _window.DispatcherQueue.TryEnqueue(RequestExit); });
         _window.Activate();
+    }
+
+    public MainWindow? MainWindowInstance => _window;
+
+    public void RequestExit()
+    {
+        if (_window is null)
+        {
+            Exit();
+            return;
+        }
+
+        _allowMainWindowClose = true;
+        _trayService?.Dispose();
+        _trayService = null;
+        _window.Close();
+    }
+
+    private void MainWindow_Closing(Microsoft.UI.Windowing.AppWindow sender, Microsoft.UI.Windowing.AppWindowClosingEventArgs args)
+    {
+        if (_allowMainWindowClose)
+        {
+            return;
+        }
+
+        args.Cancel = true;
+        _trayService?.HideWindow();
+    }
+
+    private void ExecuteOnMainPage(Action<MainPage> action)
+    {
+        MainPage? mainPage = _window?.GetMainPage();
+        if (mainPage is null)
+        {
+            return;
+        }
+
+        action(mainPage);
     }
 }
