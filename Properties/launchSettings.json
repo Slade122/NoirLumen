@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "NativeScreenDimmer.WinUI3 (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "NativeScreenDimmer.WinUI3 (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
