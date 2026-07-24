@@ -5,8 +5,13 @@ namespace NativeScreenDimmer_WinUI3.Services;
 
 internal sealed class DimmerService : IDisposable
 {
-    private readonly MonitorTopologyService _monitorTopologyService = new();
+    private readonly MonitorTopologyService _monitorTopologyService;
     private readonly Dictionary<string, NativeOverlayWindow> _overlaysByDeviceName = new(StringComparer.OrdinalIgnoreCase);
+
+    public DimmerService(MonitorTopologyService monitorTopologyService)
+    {
+        _monitorTopologyService = monitorTopologyService ?? throw new ArgumentNullException(nameof(monitorTopologyService));
+    }
 
     public void Apply(IReadOnlyList<MonitorDimSetting> settings)
     {
@@ -88,6 +93,7 @@ internal sealed class NativeOverlayWindow : IDisposable
     private byte _alphaByte;
     private bool _isVisible;
     private bool _disposed;
+    private int _reassertTopmostBurstQueued;
 
     public void Apply(MonitorDescriptor monitor, MonitorDimSetting setting)
     {
@@ -344,13 +350,25 @@ internal sealed class NativeOverlayWindow : IDisposable
             return;
         }
 
+        if (Interlocked.Exchange(ref _reassertTopmostBurstQueued, 1) == 1)
+        {
+            return;
+        }
+
         _ = Task.Run(async () =>
         {
-            ReassertTopmostCore();
-            await Task.Delay(24).ConfigureAwait(false);
-            ReassertTopmostCore();
-            await Task.Delay(96).ConfigureAwait(false);
-            ReassertTopmostCore();
+            try
+            {
+                ReassertTopmostCore();
+                await Task.Delay(24).ConfigureAwait(false);
+                ReassertTopmostCore();
+                await Task.Delay(96).ConfigureAwait(false);
+                ReassertTopmostCore();
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _reassertTopmostBurstQueued, 0);
+            }
         });
     }
 

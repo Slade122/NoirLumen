@@ -122,10 +122,17 @@ internal sealed class TrayService : IDisposable
             PostMessage(_windowHandle, WmClose, IntPtr.Zero, IntPtr.Zero);
         }
 
-        _shutdownSignal.Wait();
+        if (!_shutdownSignal.Wait(TimeSpan.FromSeconds(5)))
+        {
+            AppLogger.LogWarning("Tray service shutdown timed out waiting for tray thread signal.");
+        }
+
         if (_trayThread.IsAlive)
         {
-            _trayThread.Join(TimeSpan.FromSeconds(2));
+            if (!_trayThread.Join(TimeSpan.FromSeconds(2)))
+            {
+                AppLogger.LogWarning("Tray service shutdown timed out waiting for tray thread join.");
+            }
         }
     }
 

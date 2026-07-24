@@ -111,4 +111,23 @@ public sealed class RuleEngineTests
 
         Assert.True(stopwatch.ElapsedMilliseconds < 2500, $"BuildEffectiveSettings took {stopwatch.ElapsedMilliseconds}ms.");
     }
+
+    [Fact]
+    public void TimeRangeRuleStaysActiveThroughTheConfiguredEndMinute()
+    {
+        AutoRule rule = new()
+        {
+            Name = "End minute coverage",
+            Type = RuleType.TimeRange,
+            StartTime = "23:00",
+            EndTime = "23:59"
+        };
+
+        bool isActive = _ruleEngine.IsRuleConditionActive(
+            rule,
+            new DateTime(2026, 7, 24, 23, 59, 59),
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+
+        Assert.True(isActive);
+    }
 }
