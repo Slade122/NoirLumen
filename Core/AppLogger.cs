@@ -6,9 +6,11 @@ namespace NativeScreenDimmer_WinUI3.Services;
 
 public static class AppLogger
 {
+    private const int PendingLineCapacity = 4096;
     private static readonly string LogFilePath = BuildLogFilePath();
-    private static readonly BlockingCollection<string> PendingLines = new(new ConcurrentQueue<string>());
+    private static readonly BlockingCollection<string> PendingLines = new(new ConcurrentQueue<string>(), PendingLineCapacity);
     private static readonly Task WriterTask = Task.Run(WriterLoop);
+    private static int _droppedLineCount;
 
     public static void LogInfo(string message) => Write("INFO", message);
 
@@ -26,7 +28,16 @@ public static class AppLogger
     private static void Write(string level, string message)
     {
         string line = $"{DateTime.UtcNow:O} [{level}] {message}";
-        PendingLines.Add(line);
+        if (PendingLines.TryAdd(line))
+        {
+            return;
+        }
+
+        int droppedLineCount = Interlocked.Increment(ref _droppedLineCount);
+        if (droppedLineCount == 1 || droppedLineCount % 100 == 0)
+        {
+            Trace.WriteLine($"NoirLumen logger queue is full. droppedLines={droppedLineCount}.");
+        }
     }
 
     private static async Task WriterLoop()
@@ -46,20 +57,27 @@ public static class AppLogger
                 }
             }
 
+            int droppedLineCount = Interlocked.Exchange(ref _droppedLineCount, 0);
+            if (droppedLineCount > 0)
+            {
+                bufferedLines.Insert(0, $"{DateTime.UtcNow:O} [WARN] Logger dropped {droppedLineCount} lines due to backpressure.");
+            }
+
             try
             {
                 string? directoryPath = Path.GetDirectoryName(LogFilePath);
                 if (string.IsNullOrWhiteSpace(directoryPath))
                 {
-                    bufferedLines.Clear();
+                    Trace.WriteLine("NoirLumen logger path is invalid; dropping buffered log lines.");
                     continue;
                 }
 
                 Directory.CreateDirectory(directoryPath);
                 await File.AppendAllLinesAsync(LogFilePath, bufferedLines);
             }
-            catch (IOException)
+            catch (Exception exception) when (exception is not OutOfMemoryException)
             {
+                Trace.WriteLine($"NoirLumen logger write failed: {exception.Message}");
             }
             finally
             {

@@ -16,12 +16,12 @@ namespace NativeScreenDimmer_WinUI3;
 
 public sealed partial class MainPage : Page, INotifyPropertyChanged
 {
-    private readonly DimmerService _dimmerService = new();
+    private readonly DimmerService _dimmerService;
     private readonly SettingsStore _settingsStore = new();
     private readonly RuleEngine _ruleEngine = new();
     private readonly SunCycleService _sunCycleService = new();
     private readonly LocationService _locationService = new();
-    private readonly MonitorTopologyService _monitorTopologyService = new();
+    private readonly MonitorTopologyService _monitorTopologyService;
     private readonly ProcessRuleWatcher _processRuleWatcher = new();
     private readonly Lock _automationRefreshLock = new();
     private CancellationTokenSource? _automationRefreshCancellationSource;
@@ -42,6 +42,8 @@ public sealed partial class MainPage : Page, INotifyPropertyChanged
 
     public MainPage()
     {
+        _monitorTopologyService = new MonitorTopologyService();
+        _dimmerService = new DimmerService(_monitorTopologyService);
         InitializeComponent();
         DataContext = this;
         AppLogger.LogInfo("WinUI MainPage initialized.");

@@ -106,7 +106,7 @@ public sealed class RuleEngine
             return false;
         }
 
-        TimeOnly currentTime = TimeOnly.FromDateTime(now);
+        TimeOnly currentTime = new(now.Hour, now.Minute);
         if (startTime == endTime)
         {
             return true;

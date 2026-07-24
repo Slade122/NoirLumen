@@ -1,5 +1,6 @@
 using System.Management;
 using System.Diagnostics;
+using System.ComponentModel;
 
 namespace NativeScreenDimmer_WinUI3.Services;
 
@@ -10,6 +11,8 @@ internal sealed class ProcessRuleWatcher : IDisposable
     private ManagementEventWatcher? _processStopWatcher;
     private HashSet<string> _watchedProcessNames = [];
     private HashSet<string> _runningProcessNames = [];
+    private List<(string ProcessName, bool IsStartEvent)> _queuedProcessDeltas = [];
+    private bool _isSeedingSnapshot;
     private bool _disposed;
 
     public event EventHandler? ProcessStateChanged;
@@ -20,6 +23,7 @@ internal sealed class ProcessRuleWatcher : IDisposable
             processNames.Where(processName => !string.IsNullOrWhiteSpace(processName)),
             StringComparer.OrdinalIgnoreCase);
 
+        bool shouldSeedRunningProcesses = false;
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -32,12 +36,48 @@ internal sealed class ProcessRuleWatcher : IDisposable
             if (normalizedProcessNames.Count == 0)
             {
                 _runningProcessNames = [];
+                _queuedProcessDeltas.Clear();
+                _isSeedingSnapshot = false;
                 StopWatchers();
                 return;
             }
 
             EnsureWatchersStarted();
-            SeedRunningProcessNames();
+            _queuedProcessDeltas.Clear();
+            _isSeedingSnapshot = true;
+            shouldSeedRunningProcesses = true;
+        }
+
+        if (!shouldSeedRunningProcesses)
+        {
+            return;
+        }
+
+        HashSet<string> runningProcessNames = CaptureRunningProcessNames();
+        lock (_gate)
+        {
+            if (_disposed || !_watchedProcessNames.SetEquals(normalizedProcessNames))
+            {
+                _queuedProcessDeltas.Clear();
+                _isSeedingSnapshot = false;
+                return;
+            }
+
+            _runningProcessNames = runningProcessNames;
+            foreach ((string processName, bool isStartEvent) in _queuedProcessDeltas)
+            {
+                if (isStartEvent)
+                {
+                    _runningProcessNames.Add(processName);
+                }
+                else
+                {
+                    _runningProcessNames.Remove(processName);
+                }
+            }
+
+            _queuedProcessDeltas.Clear();
+            _isSeedingSnapshot = false;
         }
     }
 
@@ -81,7 +121,7 @@ internal sealed class ProcessRuleWatcher : IDisposable
         }
     }
 
-    private void SeedRunningProcessNames()
+    private static HashSet<string> CaptureRunningProcessNames()
     {
         Process[] runningProcesses = Process.GetProcesses();
         try
@@ -89,14 +129,23 @@ internal sealed class ProcessRuleWatcher : IDisposable
             HashSet<string> runningProcessNames = new(StringComparer.OrdinalIgnoreCase);
             foreach (Process process in runningProcesses)
             {
-                string? processName = process.ProcessName;
-                if (!string.IsNullOrWhiteSpace(processName))
+                try
                 {
-                    runningProcessNames.Add(processName);
+                    string? processName = process.ProcessName;
+                    if (!string.IsNullOrWhiteSpace(processName))
+                    {
+                        runningProcessNames.Add(processName);
+                    }
+                }
+                catch (InvalidOperationException)
+                {
+                }
+                catch (Win32Exception)
+                {
                 }
             }
 
-            _runningProcessNames = runningProcessNames;
+            return runningProcessNames;
         }
         finally
         {
@@ -191,17 +240,31 @@ internal sealed class ProcessRuleWatcher : IDisposable
                 return;
             }
 
-            HashSet<string> updatedRunningProcessNames = new(_runningProcessNames, StringComparer.OrdinalIgnoreCase);
             string? eventClassName = e.NewEvent?.ClassPath?.ClassName;
+            bool isStartEvent;
             if (string.Equals(eventClassName, "Win32_ProcessStartTrace", StringComparison.OrdinalIgnoreCase))
             {
-                stateChanged = updatedRunningProcessNames.Add(normalizedProcessName);
+                isStartEvent = true;
             }
             else if (string.Equals(eventClassName, "Win32_ProcessStopTrace", StringComparison.OrdinalIgnoreCase))
             {
-                stateChanged = updatedRunningProcessNames.Remove(normalizedProcessName);
+                isStartEvent = false;
+            }
+            else
+            {
+                return;
             }
 
+            if (_isSeedingSnapshot)
+            {
+                _queuedProcessDeltas.Add((normalizedProcessName, isStartEvent));
+                return;
+            }
+
+            HashSet<string> updatedRunningProcessNames = new(_runningProcessNames, StringComparer.OrdinalIgnoreCase);
+            stateChanged = isStartEvent
+                ? updatedRunningProcessNames.Add(normalizedProcessName)
+                : updatedRunningProcessNames.Remove(normalizedProcessName);
             if (stateChanged)
             {
                 _runningProcessNames = updatedRunningProcessNames;
