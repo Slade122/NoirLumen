@@ -21,12 +21,13 @@ NoirLumen is a fast, lightweight, per-monitor screen dimmer for Windows built wi
 
 ## Download / Install (prebuilt)
 
-Every push to `main` builds unpackaged, self-contained win-x64 and win-arm64 binaries via GitHub Actions.
+Grab the latest zip from the [Releases page](../../releases/latest) (`NoirLumen-vX.Y.Z-win-x64.zip` or `-win-arm64.zip`), tagged builds (`vX.Y.Z`) publish a GitHub Release automatically.
 
-1. Go to the [Actions tab](../../actions/workflows/build.yml), open the latest successful run.
-2. Download the `NoirLumen-win-x64` (or `-win-arm64`) artifact and unzip it.
-3. Run `NativeScreenDimmer.WinUI3.exe` — no install required, no Windows App SDK runtime needed (self-contained).
-4. Windows SmartScreen may warn on first launch since these builds are unsigned: click **More info → Run anyway**.
+For untagged/in-progress builds, every push to `main` also builds artifacts under the [Actions tab](../../actions/workflows/build.yml).
+
+1. Download and unzip the archive for your architecture.
+2. Run `NativeScreenDimmer.WinUI3.exe` — no install required, no Windows App SDK runtime needed (self-contained).
+3. Windows SmartScreen may warn on first launch since these builds are unsigned: click **More info → Run anyway**.
 
 To uninstall: delete the extracted folder. Settings/logs live under `%AppData%\NativeScreenDimmer` (see below) and can be removed separately.
 
