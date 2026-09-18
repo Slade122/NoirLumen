@@ -65,12 +65,6 @@
                                    CharacterSpacing="120"
                                    Foreground="{ThemeResource NoirLumenAccentBrush}" />
                     </StackPanel>
-                    <TextBlock Text="A denser, quieter control center for per-monitor dimming."
-                               FontSize="22"
-                               FontWeight="SemiBold"
-                               TextWrapping="Wrap" />
-                    <TextBlock Text="Native overlays, automation, and sun mimic — less padding, less noise, more control."
-                               Style="{StaticResource NoirSectionBodyStyle}" />
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">

@@ -10,14 +10,14 @@
 
   <Identity
     Name="60699FD0-A452-414E-B522-61F9A0F5A99C"
-    Publisher="CN=AppPublisher"
+    Publisher="CN=NoirLumen"
     Version="1.0.0.0" />
 
   <mp:PhoneIdentity PhoneProductId="60699FD0-A452-414E-B522-61F9A0F5A99C" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
   <Properties>
     <DisplayName>NoirLumen</DisplayName>
-    <PublisherDisplayName>AppPublisher</PublisherDisplayName>
+    <PublisherDisplayName>NoirLumen</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
 

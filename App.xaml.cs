@@ -12,6 +12,15 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
+        UnhandledException += (_, e) =>
+        {
+            AppLogger.LogError($"UnhandledException: {e.Exception?.GetType().Name}: {e.Exception?.Message}\n{e.Exception?.StackTrace}");
+            e.Handled = true;
+        };
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            AppLogger.LogError($"AppDomain.UnhandledException: {e.ExceptionObject}");
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+            AppLogger.LogError($"UnobservedTaskException: {e.Exception?.Message}");
     }
 
     protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
